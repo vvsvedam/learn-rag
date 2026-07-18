@@ -1,0 +1,286 @@
+<html>
+  <div id="rag-simulator" class="rag-sim">
+  <style>
+    #rag-simulator { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: var(--foreground); }
+    #rag-simulator * { box-sizing: border-box; }
+    #rag-simulator .rs-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 20px; align-items: start; }
+    #rag-simulator .rs-stagebar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; margin-bottom: 18px; }
+    #rag-simulator .rs-stage { min-height: 64px; padding: 10px; background: color-mix(in srgb, var(--muted) 34%, transparent); border: 1px solid var(--border); border-radius: 10px; font-size: 12px; line-height: 1.25; }
+    #rag-simulator .rs-stage b { display: block; margin-bottom: 4px; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+    #rag-simulator .rs-stage.active { background: color-mix(in srgb, var(--primary) 13%, transparent); border-color: var(--primary); }
+    #rag-simulator .rs-stage.done { border-color: color-mix(in srgb, var(--primary) 44%, var(--border)); }
+    #rag-simulator .rs-control { display: grid; gap: 8px; margin-bottom: 16px; }
+    #rag-simulator label { font-size: 13px; font-weight: 500; }
+    #rag-simulator textarea, #rag-simulator input { width: 100%; color: var(--foreground); background: var(--background); border: 1px solid var(--input); border-radius: 8px; padding: 10px 11px; font: inherit; font-size: 13px; line-height: 1.45; }
+    #rag-simulator textarea { min-height: 112px; resize: vertical; }
+    #rag-simulator .rs-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 16px; }
+    #rag-simulator button { cursor: pointer; color: var(--primary-foreground); background: var(--primary); border: 1px solid var(--primary); border-radius: 8px; padding: 9px 12px; font: inherit; font-size: 13px; font-weight: 500; }
+    #rag-simulator button.secondary { color: var(--foreground); background: transparent; border-color: var(--border); }
+    #rag-simulator .rs-status { color: var(--muted-foreground); font-size: 12px; }
+    #rag-simulator .rs-visual { display: grid; gap: 12px; }
+    #rag-simulator .rs-section-title { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding-bottom: 7px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 500; }
+    #rag-simulator .rs-section-title span { color: var(--muted-foreground); font-size: 12px; font-weight: 400; }
+    #rag-simulator .rs-chunks { display: grid; gap: 8px; }
+    #rag-simulator .rs-chunk { display: grid; grid-template-columns: 32px 1fr 72px; gap: 10px; align-items: start; padding: 10px 0; border-bottom: 1px solid color-mix(in srgb, var(--border) 68%, transparent); }
+    #rag-simulator .rs-chunk:last-child { border-bottom: 0; }
+    #rag-simulator .rs-num { color: var(--muted-foreground); font-size: 12px; padding-top: 1px; }
+    #rag-simulator .rs-text { font-size: 12px; line-height: 1.45; }
+    #rag-simulator .rs-score { justify-self: end; width: 72px; text-align: right; font-size: 12px; }
+    #rag-simulator .rs-score small { display: block; color: var(--muted-foreground); font-size: 10px; }
+    #rag-simulator .rs-bar { height: 4px; margin-top: 4px; overflow: hidden; background: var(--muted); border-radius: 99px; }
+    #rag-simulator .rs-bar i { display: block; height: 100%; background: var(--viz-series-1); border-radius: inherit; }
+    #rag-simulator .rs-picked { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+    #rag-simulator .rs-side { display: grid; gap: 14px; }
+    #rag-simulator .card { padding: 14px; }
+    #rag-simulator .rs-kicker { margin: 0 0 8px; color: var(--muted-foreground); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+    #rag-simulator .rs-vector { margin: 0; color: var(--foreground); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.7; word-break: break-word; }
+    #rag-simulator .rs-answer { margin: 0; font-size: 13px; line-height: 1.55; }
+    #rag-simulator .rs-context { margin: 0; color: var(--muted-foreground); font-size: 11px; line-height: 1.45; white-space: pre-wrap; }
+    #rag-simulator .rs-legend { margin: 0; color: var(--muted-foreground); font-size: 11px; line-height: 1.45; }
+
+    @media (max-width: 720px) {
+      #rag-simulator .rs-layout { grid-template-columns: 1fr; }
+      #rag-simulator .rs-stagebar { grid-template-columns: 1fr; }
+      #rag-simulator .rs-stage { min-height: 0; }
+    }
+  </style>
+
+  <div class="rs-stagebar" aria-label="RAG pipeline">
+    <div class="rs-stage done" data-stage="1"><b>1. Chunk</b>Split source text</div>
+    <div class="rs-stage done" data-stage="2"><b>2. Embed</b>Vectors stored</div>
+    <div class="rs-stage active" data-stage="3"><b>3. Query</b>Embed question</div>
+    <div class="rs-stage" data-stage="4"><b>4. Retrieve</b>Rank top chunks</div>
+    <div class="rs-stage" data-stage="5"><b>5. Generate</b>Answer with context</div>
+  </div>
+
+  <div class="rs-layout">
+    <div>
+      <div class="rs-control">
+        <label for="rs-document">Source document</label>
+        <textarea id="rs-document">RAG stands for Retrieval-Augmented Generation. It lets an LLM answer using external information supplied at question time.
+
+Before users ask questions, a source document is split into smaller chunks. Each chunk is converted into an embedding: a vector of numbers representing its meaning. The chunk text, vector, and metadata are stored in a vector database.
+
+When a user asks a question, the question is converted using the same embedding model. The vector database compares the query vector with stored vectors and returns the most similar chunks.
+
+The application adds the user's question and the retrieved chunks to the LLM prompt. The LLM generates an answer from that context; it is not retrained on the document.</textarea>
+      </div>
+
+      <div class="rs-control">
+        <label for="rs-query">User query</label>
+        <input id="rs-query" value="How does RAG find the information it uses to answer a question?">
+      </div>
+
+      <div class="rs-toolbar">
+        <button id="rs-run" type="button">Run retrieval</button>
+        <button id="rs-reset" class="secondary" type="button">Reset example</button>
+        <span id="rs-status" class="rs-status" aria-live="polite">Ready: edit the document or query, then run retrieval.</span>
+      </div>
+
+      <div class="rs-visual">
+        <div class="rs-section-title">Vector database <span id="rs-db-label">4 chunks stored as vectors</span></div>
+        <div id="rs-chunks" class="rs-chunks" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <aside class="rs-side">
+      <div class="card">
+        <p class="rs-kicker">Query embedding</p>
+        <p id="rs-query-vector" class="rs-vector">[0.14, 0.76, 0.61, 0.32, 0.48, 0.87]</p>
+      </div>
+
+      <div class="card">
+        <p class="rs-kicker">Retrieved context</p>
+        <p id="rs-context" class="rs-context">Run retrieval to select the top matching chunks.</p>
+      </div>
+
+      <div class="card">
+        <p class="rs-kicker">LLM answer</p>
+        <p id="rs-answer" class="rs-answer">The LLM receives the selected chunks together with the query, then writes a grounded answer.</p>
+      </div>
+
+      <p class="rs-legend">Scores are a simplified demonstration of vector similarity. In a production RAG system, embeddings are much larger and semantic retrieval is typically combined with filtering and re-ranking.</p>
+    </aside>
+  </div>
+
+  <script>
+    (() => {
+      const root = document.getElementById('rag-simulator');
+      const documentBox = root.querySelector('#rs-document');
+      const queryBox = root.querySelector('#rs-query');
+      const runButton = root.querySelector('#rs-run');
+      const resetButton = root.querySelector('#rs-reset');
+      const chunksNode = root.querySelector('#rs-chunks');
+      const status = root.querySelector('#rs-status');
+      const contextNode = root.querySelector('#rs-context');
+      const answerNode = root.querySelector('#rs-answer');
+      const vectorNode = root.querySelector('#rs-query-vector');
+      const label = root.querySelector('#rs-db-label');
+      const stages = [...root.querySelectorAll('.rs-stage')];
+
+      const originalDocument = documentBox.value;
+      const originalQuery = queryBox.value;
+
+      const concepts = {
+        rag: ['rag', 'retrieval', 'augmented', 'generation'],
+        chunks: ['chunk', 'chunks', 'split', 'document', 'text'],
+        embeddings: ['embedding', 'embeddings', 'vector', 'vectors', 'meaning'],
+        search: ['query', 'question', 'similar', 'similarity', 'compare', 'find', 'retrieve', 'retrieval', 'database'],
+        answer: ['llm', 'answer', 'prompt', 'context', 'generate', 'generated', 'grounded', 'information']
+      };
+
+      function words(text) {
+        return text.toLowerCase()
+          .replace(/[^a-z0-9\s-]/g, ' ')
+          .split(/\s+/)
+          .filter(Boolean);
+      }
+
+      function makeChunks(text) {
+        return text.split(/\n\s*\n/).map(part => part.trim()).filter(Boolean);
+      }
+
+      function vector(text) {
+        const tokens = words(text);
+        return Object.values(concepts).map(group =>
+          group.reduce(
+            (total, term) => total + tokens.filter(token => token === term).length,
+            0
+          ) / Math.max(tokens.length, 1)
+        );
+      }
+
+      function similarity(a, b) {
+        let dot = 0;
+        let magA = 0;
+        let magB = 0;
+
+        for (let i = 0; i < a.length; i++) {
+          dot += a[i] * b[i];
+          magA += a[i] * a[i];
+          magB += b[i] * b[i];
+        }
+
+        return magA && magB ? dot / Math.sqrt(magA * magB) : 0;
+      }
+
+      function displayVector(vectorValues) {
+        return '[' + vectorValues.map(value => value.toFixed(2)).join(', ') + ']';
+      }
+
+      function setStage(number) {
+        stages.forEach(stage => {
+          const stageNumber = Number(stage.dataset.stage);
+          stage.classList.toggle('active', stageNumber === number);
+          stage.classList.toggle('done', stageNumber < number);
+        });
+      }
+
+      function answerFor(query, selected) {
+        const source = selected.map(item => item.text).join(' ');
+        const normalizedQuery = query.toLowerCase();
+
+        if (/how.*(find|retriev|search)|where.*information/.test(normalizedQuery)) {
+          return 'RAG embeds the user query, compares that vector with the vectors stored for document chunks, and supplies the most similar chunks to the LLM as context.';
+        }
+
+        if (/what.*rag|rag.*what/.test(normalizedQuery)) {
+          return 'RAG, or Retrieval-Augmented Generation, helps an LLM answer with external information retrieved at question time.';
+        }
+
+        if (/vector|embedding/.test(normalizedQuery)) {
+          return 'An embedding is a numerical vector that represents the meaning of text. RAG compares query and chunk embeddings to find related content.';
+        }
+
+        if (/chunk/.test(normalizedQuery)) {
+          return 'Chunks are smaller pieces of a source document. Splitting documents into chunks gives retrieval a focused amount of context to return.';
+        }
+
+        return selected.length
+          ? 'Based on the retrieved context, ' + source.slice(0, 235) + (source.length > 235 ? '...' : '')
+          : 'No useful context was retrieved. Try a query that matches the source document.';
+      }
+
+      function render(items, retrieved = []) {
+        chunksNode.innerHTML = '';
+
+        items.forEach((item, index) => {
+          const node = document.createElement('div');
+          node.className = 'rs-chunk' + (retrieved.includes(index) ? ' rs-picked' : '');
+
+          const score = Math.round(item.score * 100);
+
+          node.innerHTML = `
+            <div class="rs-num">${String(index + 1).padStart(2, '0')}</div>
+            <div class="rs-text">${item.text}</div>
+            <div class="rs-score">
+              ${score}%
+              <small>similarity</small>
+              <div class="rs-bar"><i style="width:${score}%"></i></div>
+            </div>`;
+
+          chunksNode.appendChild(node);
+        });
+      }
+
+      function run() {
+        const chunks = makeChunks(documentBox.value);
+        const queryVector = vector(queryBox.value);
+
+        const items = chunks.map(text => ({
+          text,
+          score: similarity(queryVector, vector(text))
+        }));
+
+        const selected = items
+          .map((item, index) => ({ ...item, index }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, Math.min(3, items.length))
+          .filter(item => item.score > 0);
+
+        const selectedIndexes = selected.map(item => item.index);
+
+        vectorNode.textContent = displayVector(queryVector);
+        label.textContent = `${items.length} chunk${items.length === 1 ? '' : 's'} stored as vectors`;
+
+        setStage(4);
+        render(items, selectedIndexes);
+
+        contextNode.textContent = selected.length
+          ? selected.map(item => `[Chunk ${item.index + 1}] ${item.text}`).join('\n\n')
+          : 'No matching chunks selected.';
+
+        setTimeout(() => {
+          setStage(5);
+          answerNode.textContent = answerFor(queryBox.value, selected);
+          status.textContent = `Retrieved ${selected.length} of ${items.length} chunks and added them to the LLM context.`;
+        }, 260);
+      }
+
+      function reset() {
+        documentBox.value = originalDocument;
+        queryBox.value = originalQuery;
+        answerNode.textContent = 'The LLM receives the selected chunks together with the query, then writes a grounded answer.';
+        contextNode.textContent = 'Run retrieval to select the top matching chunks.';
+        vectorNode.textContent = '[0.14, 0.76, 0.61, 0.32, 0.48, 0.87]';
+
+        setStage(3);
+
+        const items = makeChunks(originalDocument).map(text => ({
+          text,
+          score: 0
+        }));
+
+        label.textContent = `${items.length} chunks stored as vectors`;
+        render(items);
+        status.textContent = 'Ready: edit the document or query, then run retrieval.';
+      }
+
+      runButton.addEventListener('click', run);
+      resetButton.addEventListener('click', reset);
+
+      reset();
+    })();
+  </script>
+</div>
+</html>
